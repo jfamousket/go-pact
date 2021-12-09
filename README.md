@@ -16,10 +16,10 @@ Create a `blake2b` hash
 
 ```go
 import (
-    "github.com/jfamousket/go-kadena/helpers"
+    "github.com/jfamousket/go-pact"
 )
 
-CreateBlake2Hash(<cmd_string>) string
+pact.CreateBlake2Hash(<cmd_string>) string
 ```
 
 ### Pact API functions
@@ -28,17 +28,23 @@ This functions are same as described in [pact-api-documentation](https://pact-la
 
 ```go
 import (
-    "github.com/jfamousket/go-kadena/fetch"
+    "github.com/jfamousket/go-pact"
 )
 
-Send(<valid_cmd_object>, <api_host>) SendResponse
-Local(<valid_cmd_object>, <api_host>) LocalResponse
-Listen(<request_key>, <api_host>) ListenResponse
-Poll(<array_of_request_keys>, <api_host>) PollResponse
+pact.Send(<valid_cmd_object>, <api_host>) pact.SendResponse
+pact.Local(<valid_cmd_object>, <api_host>) pact.LocalResponse
+pact.Listen(<request_key>, <api_host>) pact.ListenResponse
+pact.Poll(<array_of_request_keys>, <api_host>) pact.PollResponse
 ```
+
+## Usage
+
+See the `example` directory in this project, for an example TODO app.
 
 ## TODOS
 
-- [ ] Key generation and manipulation functions
-- [x] Create wallet Kadena blockchain
-- [ ] Other expected features for blockchain library
+- [ ] Improve docs
+
+# Contributors
+
+Built with :heart: by [jfamousket](https://jfamousket@gmail.com)

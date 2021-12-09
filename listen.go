@@ -1,7 +1,9 @@
 package pact
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -18,13 +20,21 @@ type ListenResponse struct {
 func Listen(requestKey string, apiHost string) (res *ListenResponse, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/listen", apiHost))
 	EnforceNoError(err)
 	defer resp.Body.Close()
-	err = UnMarshalBody(resp, res)
+	body, err := ioutil.ReadAll(resp.Body)
+	EnforceNoError(err)
+	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
+	err = json.Unmarshal(body, &res)
 	EnforceNoError(err)
 	return
 }

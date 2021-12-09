@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -28,7 +29,12 @@ type RequestKeys struct {
 func Poll(requestKeys []string, apiHost string) (res *PollResponse, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	postBody, err := json.Marshal(RequestKeys{RequestKeys: requestKeys})
@@ -41,7 +47,10 @@ func Poll(requestKeys []string, apiHost string) (res *PollResponse, err error) {
 	)
 	EnforceNoError(err)
 	defer resp.Body.Close()
-	err = UnMarshalBody(resp, res)
+	body, err := ioutil.ReadAll(resp.Body)
+	EnforceNoError(err)
+	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
+	err = json.Unmarshal(body, &res)
 	EnforceNoError(err)
 	return
 }

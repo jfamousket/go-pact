@@ -1,7 +1,9 @@
 package pact
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -15,28 +17,41 @@ type LocalResponse struct {
 	TxId         string      `json:"txId,omitempty"`
 }
 
-func Local(localCmd PrepareCommand, apiHost string) (res *LocalResponse, err error) {
+func Local(localCmd PrepareExec, apiHost string) (res *LocalResponse, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	resp, err := localRawCmd(localCmd, apiHost)
 	EnforceNoError(err)
 	defer resp.Body.Close()
-	err = UnMarshalBody(resp, res)
+	body, err := ioutil.ReadAll(resp.Body)
+	EnforceNoError(err)
+	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
+	err = json.Unmarshal(body, &res)
 	EnforceNoError(err)
 	return
 }
 
-func localRawCmd(localCmd PrepareCommand, apiHost string) (res *http.Response, err error) {
+func localRawCmd(localCmd PrepareExec, apiHost string) (res *http.Response, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	EnforceType(apiHost, "string", "apiHost")
-	EnforceValid(apiHost != "", fmt.Errorf("No api host provided"))
+	EnforceValid(apiHost != "", fmt.Errorf("no api host provided"))
 	cmd := PrepareExecCommand(localCmd)
 	body, err := MarshalBody(cmd)
 	EnforceNoError(err)

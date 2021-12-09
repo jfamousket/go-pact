@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"reflect"
 	"time"
 
@@ -17,9 +15,23 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-type PrepareCommand struct {
+type PrepareCommand interface {
+	isPrepareCommand()
+}
+
+type PrepareExec struct {
 	KeyPairs  []KeyPair
-	CmdType   CmdType
+	Nonce     string
+	EnvData   interface{}
+	Meta      *Meta
+	NetworkId string
+	PactCode  string
+}
+
+func (c PrepareExec) isPrepareCommand() {}
+
+type PrepareCont struct {
+	KeyPairs  []KeyPair
 	Nonce     string
 	Proof     string
 	Rollback  bool
@@ -28,8 +40,9 @@ type PrepareCommand struct {
 	EnvData   interface{}
 	Meta      *Meta
 	NetworkId string
-	PactCode  string
 }
+
+func (c PrepareCont) isPrepareCommand() {}
 
 func CreateBlake2Hash(data []byte) ([32]byte, string) {
 	hash := blake2b.Sum256(data)
@@ -96,20 +109,6 @@ func MarshalBody(value interface{}) (b *bytes.Buffer, err error) {
 	return
 }
 
-func UnMarshalBody(resp *http.Response, returnType interface{}) (err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			err = e.(Error)
-		}
-	}()
-	body, err := ioutil.ReadAll(resp.Body)
-	EnforceNoError(err)
-	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
-	err = json.Unmarshal(body, &returnType)
-	EnforceNoError(err)
-	return
-}
-
 func GenKeyPair(password string) (keyPair KeyPair, err error) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -136,24 +135,26 @@ func GenKeyPair(password string) (keyPair KeyPair, err error) {
 }
 
 // PrepareExecCommand creates a command that can be sent to the /exec pact server route
-func PrepareExecCommand(cmd PrepareCommand) Command {
+func PrepareExecCommand(cmd PrepareExec) Command {
 	EnforceType(cmd.Nonce, "string", "nonce")
 	EnforceType(cmd.PactCode, "string", "pactCode")
 
 	_ = getSigners(cmd)
 	cmd.Meta = getMeta(cmd)
+	cmd.Nonce = getCmdNonce(cmd)
 
 	exec := Exec{
-		Data: cmd.EnvData,
+		Data: &cmd.EnvData,
 		Code: cmd.PactCode,
 	}
 
 	cmdToSend, err := MarshalBody(CommandField{
 		Signers: []Signer{},
-		Meta:    *cmd.Meta,
+		Meta:    cmd.Meta,
 		Nonce:   cmd.Nonce,
 		Payload: Payload{
-			Exec: exec,
+			Exec: &exec,
+			Cont: nil,
 		},
 		NetworkId: cmd.NetworkId,
 	})
@@ -162,12 +163,12 @@ func PrepareExecCommand(cmd PrepareCommand) Command {
 	return makeSingleCmd(cmdToSend.Bytes())
 }
 
-func PrepareContCmd(cmd PrepareCommand) Command {
+func PrepareContCmd(cmd PrepareCont) Command {
 	EnforceType(cmd.Nonce, "string", "nonce")
 
-	cmd.Nonce = getCmdNonce(cmd)
-
 	_ = getSigners(cmd)
+	cmd.Nonce = getCmdNonce(cmd)
+	cmd.Meta = getMeta(cmd)
 
 	cont := Cont{
 		Proof:    cmd.Proof,
@@ -179,10 +180,10 @@ func PrepareContCmd(cmd PrepareCommand) Command {
 
 	cmdToSend, err := MarshalBody(CommandField{
 		Nonce:   cmd.Nonce,
-		Meta:    *cmd.Meta,
+		Meta:    cmd.Meta,
 		Signers: []Signer{},
 		Payload: Payload{
-			Cont: cont,
+			Cont: &cont,
 		},
 		NetworkId: cmd.NetworkId,
 	})
@@ -193,25 +194,50 @@ func PrepareContCmd(cmd PrepareCommand) Command {
 }
 
 func getCmdNonce(cmd PrepareCommand) string {
-	if cmd.Nonce == "" {
-		return time.Now().Format(time.RFC3339)
+	switch c := cmd.(type) {
+	case PrepareCont:
+		if c.Nonce == "" {
+			return time.Now().Format(time.RFC3339)
+		}
+		return c.Nonce
+	case PrepareExec:
+		if c.Nonce == "" {
+			return time.Now().Format(time.RFC3339)
+		}
+		return c.Nonce
 	}
-	return cmd.Nonce
+	return ""
 }
 
 func getSigners(cmd PrepareCommand) []Signer {
 	var signers []Signer
-	for _, kp := range cmd.KeyPairs {
-		signers = append(signers, MakeSigner(kp))
+	switch c := cmd.(type) {
+	case PrepareCont:
+		for _, kp := range c.KeyPairs {
+			signers = append(signers, MakeSigner(kp))
+		}
+	case PrepareExec:
+		for _, kp := range c.KeyPairs {
+			signers = append(signers, MakeSigner(kp))
+		}
 	}
 	return signers
 }
 
 func getMeta(cmd PrepareCommand) *Meta {
-	if cmd.Meta == nil {
-		return MakeMeta("", "", 0, 0, 0, 0)
+	switch c := cmd.(type) {
+	case PrepareExec:
+		if c.Meta == nil {
+			return MakeMeta("", "0", 1e-9, 600, 0, 28800)
+		}
+		return c.Meta
+	case PrepareCont:
+		if c.Meta == nil {
+			return MakeMeta("", "0", 1e-9, 600, 0, 28800)
+		}
+		return c.Meta
 	}
-	return cmd.Meta
+	return nil
 }
 
 func makeSingleCmd(cmd []byte) Command {

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
 // SendResponse is the response for a /send api call
 type SendResponse struct {
-	ReqKey string `json:"reqKey,omitempty"`
+	RequestKeys []string `json:"requestKeys,omitempty"`
 }
 
 // Send sends a Pact command to a running Pact server and retrieves
@@ -17,13 +18,21 @@ type SendResponse struct {
 func Send(sendCmd []PrepareCommand, apiHost string) (res *SendResponse, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	resp, err := sendRawCmds(sendCmd, apiHost)
 	EnforceNoError(err)
 	defer resp.Body.Close()
-	err = UnMarshalBody(resp, res)
+	body, err := ioutil.ReadAll(resp.Body)
+	EnforceNoError(err)
+	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
+	err = json.Unmarshal(body, &res)
 	EnforceNoError(err)
 	return
 }
@@ -36,10 +45,11 @@ func sendRawCmds(sendCmds []PrepareCommand, apiHost string) (*http.Response, err
 
 	cmds := []Command{}
 	for _, cmd := range sendCmds {
-		if cmd.CmdType == CONT {
-			cmds = append(cmds, PrepareContCmd(cmd))
-		} else if cmd.CmdType == EXEC {
-			cmds = append(cmds, PrepareExecCommand(cmd))
+		switch c := cmd.(type) {
+		case PrepareCont:
+			cmds = append(cmds, PrepareContCmd(c))
+		case PrepareExec:
+			cmds = append(cmds, PrepareExecCommand(c))
 		}
 	}
 

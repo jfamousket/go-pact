@@ -7,13 +7,6 @@ const (
 	ETH     Scheme = "ETH"
 )
 
-type CmdType int
-
-const (
-	EXEC CmdType = iota
-	CONT
-)
-
 type Meta struct {
 	ChainId      string  `json:"chainId"`
 	Sender       string  `json:"sender"`
@@ -31,8 +24,8 @@ type Signer struct {
 }
 
 type Exec struct {
-	Code string      `json:"code,omitempty"`
-	Data interface{} `json:"data,omitempty"`
+	Code string       `json:"code"`
+	Data *interface{} `json:"data"`
 }
 
 func (Exec) PayloadType() {}
@@ -52,16 +45,16 @@ type PayloadType interface {
 }
 
 type Payload struct {
-	Exec Exec `json:"exec"`
-	Cont Cont `json:"cont"`
+	Exec *Exec `json:"exec,omitempty"`
+	Cont *Cont `json:"cont,omitempty"`
 }
 
 type CommandField struct {
 	Nonce     string   `json:"nonce"`
-	Meta      Meta     `json:"meta"`
+	Meta      *Meta    `json:"meta"`
 	Signers   []Signer `json:"signers"`
 	Payload   Payload  `json:"payload"`
-	NetworkId string   `json:"networkId"`
+	NetworkId string   `json:"networkId,omitempty"`
 }
 
 type Sig struct {

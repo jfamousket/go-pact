@@ -1,14 +1,21 @@
 package pact
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 )
 
 func SPV(spvCmd SPVCommand, apiHost string) (res interface{}, err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(Error)
+			switch er := e.(type) {
+			case Error:
+				err = er
+			case error:
+				err = er
+			}
 		}
 	}()
 	EnforceType(spvCmd.TargetChainId, "string", "targetChainId")
@@ -17,7 +24,10 @@ func SPV(spvCmd SPVCommand, apiHost string) (res interface{}, err error) {
 	EnforceNoError(err)
 	resp, err := http.Post(fmt.Sprintf("%s/spv", apiHost), "application/json", req)
 	EnforceNoError(err)
-	err = UnMarshalBody(resp, res)
+	body, err := ioutil.ReadAll(resp.Body)
+	EnforceNoError(err)
+	EnforceValid(resp.StatusCode == http.StatusOK, fmt.Errorf("%v", string(body)))
+	err = json.Unmarshal(body, &res)
 	EnforceNoError(err)
 	return
 }

@@ -47,4 +47,4 @@ See the `example` directory in this project, for an example TODO app.
 
 # Contributors
 
-Built with :heart: by [jfamousket](https://jfamousket@gmail.com)
+Built with :heart: by [jfamousket](https://twitter.com/jfamousket)
